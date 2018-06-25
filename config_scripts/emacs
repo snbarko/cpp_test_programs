@@ -1,0 +1,295 @@
+;; Run this, and type key sequence, to get (kdb "") formatting
+;;(format-kbd-macro (read-key-sequence "Key? " nil t))
+
+;; Debugger for elisp errors
+;; (setq debug-on-error t)
+
+(setq initial-scratch-message nil)
+
+;; Never load system emacs defaults
+(setq inhibit-defualt-init t)
+
+;; Only write to disk when I say so
+(setq auto-save-default nil)
+(setq make-backup-files nil)
+
+;; Make fonts readable
+(setq default-frame-alist
+      '((font . "-Misc-Fixed-Medium-R-SemiCondensed--13-120-75-75-C-60-ISO8859-1")))
+
+;; No need for menu bar
+(menu-bar-mode 0)
+
+;; Do not use the iconifiy shortcut
+					;(global-unset-key "\C-z") ;;SNB - Bringing in ctrl-z
+
+;; Need to be able to jump around
+;;(global-set-key "\M-g" 'goto-line)
+
+;;SNB - add column number
+(setq column-number-mode t)
+
+;;SNB - end button & ENTER will go to next line and indent
+(define-key (current-global-map) (kbd "<select>")'end-of-line)
+(define-key (current-global-map) (kbd "<RET>")'newline-and-indent)
+
+;;SNB - Goto line and search is added
+(setq grep-find-command "find . -type f -name \"*\" -print0 | xargs -0 -e grep -niw ")
+(global-set-key (kbd "C-x C-g") 'grep-find)
+(global-set-key (kbd "C-x g") 'goto-line)
+
+
+;; Make control-tab switch windows
+(global-set-key (kbd "<C-tab>") (lambda () (interactive) (other-window 1)))
+(global-set-key (kbd "<C-S-iso-lefttab>") (lambda () (interactive) (other-window -1)))
+
+;; Do not use C-o
+(global-unset-key "\C-o")
+;; Make C-o o switch windows
+(global-set-key (kbd "\C-o o") (lambda () (interactive) (other-window 1)))
+
+(setq load-path (cons "~/.emacs.d/site-lisp" load-path))
+
+;; Do not do these things when in console mode
+;; (if window-system
+;;    ((lambda ()
+;;       (require 'color-theme)
+;;       (color-theme-initialize)
+;;       (color-theme-deep-blue)
+;;       (server-start)
+;;       (setq x-select-enable-clipboard t)
+;;       ;; show line numbers on the left
+;;       (global-linum-mode 1)
+;;       ))
+;;  ((lambda ()
+;;     (require 'color-theme)
+;;       (color-theme-initialize)
+;;       (color-theme-gnome2))))
+					;SNB - disabled color theme
+
+;; Enable mouse wheel scrolling
+(if (load "mwheel" t)
+    (mwheel-install))
+
+;; Transient mark mode is bad, don't highlight selected text
+					; snb(setq transient-mark-mode nil) SNB: marking enabled
+
+(which-function-mode 1)
+
+;; xcscope
+;; Add HP copied from AjayM
+(load "~/emacs/xcscope")
+(require 'xcscope)
+;; (setq cscope-program "/usr/software/rats/bin/cscope-15.6")
+(setq cscope-program "/usr/bin/cscope")
+(setq cscope-use-relative-paths t)
+(setq cscope-do-not-update-database t)
+
+(define-key global-map [(ctrl f2)] 'copy-to-register)
+(define-key global-map [(f2)] 'insert-register)
+
+;;SNB - Change cscope shortkuts (Generic)
+(global-set-key "\M-g" 'cscope-find-this-symbol)
+(global-set-key "\C-csd" 'cscope-find-global-definition)
+(global-set-key "\C-csg" 'cscope-find-global-definition-no-prompting)
+(global-set-key "\C-csc" 'cscope-find-functions-calling-this-function)
+(global-set-key "\C-csC" 'cscope-find-called-functions)
+(global-set-key "\C-cst" 'cscope-find-this-text-string)
+(global-set-key "\C-cse" 'cscope-find-egrep-pattern)
+(global-set-key "\C-csf" 'cscope-find-this-file)
+(global-set-key "\C-csi" 'cscope-find-files-including-file)
+;; --- Menu Separator
+(global-set-key "\C-csb" 'cscope-display-buffer) ;; Shows the cscsope buffer
+(global-set-key "\C-csB" 'cscope-display-buffer-toggle)
+(global-set-key "\C-csn" 'cscope-next-symbol)
+(global-set-key "\C-csN" 'cscope-next-file)
+(global-set-key "\C-csp" 'cscope-prev-symbol)
+(global-set-key "\C-csP" 'cscope-prev-file)
+(global-set-key "\C-csu" 'cscope-pop-mark)
+;; ---
+(global-set-key "\C-csa" 'cscope-set-initial-directory)
+(global-set-key "\C-csA" 'cscope-unset-initial-directory)
+;; ---
+(global-set-key "\C-csL" 'cscope-create-list-of-files-to-index)
+(global-set-key "\C-csI" 'cscope-index-files)
+(global-set-key "\C-csE" 'cscope-edit-list-of-files-to-index)
+(global-set-key "\C-csT" 'cscope-tell-user-about-directory)
+(global-set-key "\C-csD" 'cscope-dired-directory)
+;; ---
+
+;;(define-key global-map [(f7)] 'cscope-find-this-file)
+;;(define-key global-map [(f8)] 'cscope-pop-mark)
+;;(define-key global-map [(f9)]  'cscope-history-backward)
+;;(define-key global-map [(f10)] 'cscope-history-forward)
+
+;; SNB HP commented out - no support for highlight-symbol
+;; highlight symbols
+;; (require 'highlight-symbol)
+;; (highlight-symbol-mode t)
+;; (define-key global-map [(meta s)] 'highlight-symbol-at-point)
+;; (define-key global-map [(meta n)] 'highlight-symbol-next)
+;; (define-key global-map [(meta p)] 'highlight-symbol-prev)
+;; (define-key global-map [(meta shift n)] 'highlight-symbol-next-in-defun)
+;; (define-key global-map [(meta shift p)] 'highlight-symbol-prev-in-defun)
+;; (global-unset-key "\C-g")
+;; (global-set-key (kbd "\C-g") (lambda () (interactive) (highlight-symbol-remove-all) (keyboard-quit)))
+;; (setq highlight-symbol-on-navigation-p 1)
+
+;; load perforce
+;; (require 'p4)
+
+;; use vertical splitting in ediff
+(setq ediff-split-window-function (lambda (&optional arg)
+				    (if (> (frame-width) 150)
+					(split-window-horizontally arg)
+				      (split-window-vertically arg))))
+
+;; highlight matching parens
+(show-paren-mode 1)
+;; syntax hilighting
+(global-font-lock-mode 1)
+
+
+;; set window title format
+(setq frame-title-format '("%b - emacs"))
+;; define tab behavior
+(define-key text-mode-map (kbd "TAB") 'self-insert-command)
+
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(delete-selection-mode t)
+ '(inhibit-startup-screen t)
+ '(scroll-bar-mode nil)
+ '(show-paren-mode t)
+ '(tool-bar-mode nil))
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(cscope-line-face ((((class color) (background light)) (:foreground "yellow")))))
+
+;;(setq compile-command "br log -e | cat")
+
+(defun my-c-mode-common-hook ()
+  ;; Turn on tabs
+  (setq indent-tabs-mode nil)
+  (setq-default indent-tabs-mode nil)
+
+  ;; Enable this for C++ - OCT292015 FIX
+  ;; (setq indent-tabs-mode nil)
+  ;; (setq tab-width 4)
+  ;; (defvaralias 'c-basic-offset 'tab-width)
+  ;; (setq default-tab-width 4)
+
+  ;; Set the tab width
+  (setq default-tab-width 4)
+  (setq tab-width 4)
+  (setq c-basic-offset 4)
+
+  ;; Shortcut for compiling C
+  (setq compilation-read-command nil)
+  (global-set-key "\C-cc" 'compile)
+  ;;(modify-syntax-entry ?_ "w")
+
+  ;; other customizations can go here
+  (require 'highlight-symbol)
+  (highlight-symbol-mode t)
+  (setq highlight-symbol-on-navigation-p 1)
+
+  (if (and (buffer-file-name)
+	   (not cscope-initial-directory))
+      (let ((p4path (replace-regexp-in-string "\\([^/]+\\)/ontap/prod/.*" "\\1" (buffer-file-name))))
+	(let ((p4cppflags (concat "-I " p4path "/ontap/prod/common/ -DDEBUG")))
+	  (setq cscope-initial-directory p4path)
+	  (setq c-macro-cppflags p4cppflags))))
+  )
+(add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
+
+(add-hook 'c++-mode-hook
+	  '(lambda ()
+	     (c-set-style "k&r")
+	     (c-toggle-auto-hungry-state)
+	     ;; (setq c-basic-offset 4)
+	     ;;     (setq tab-width 4)
+	     ;; (setq default-tab-width 4)
+	     (setq indent-tabs-mode nil)
+	     (setq tab-width 4)
+	     (defvaralias 'c-basic-offset 'tab-width)
+	     (setq default-tab-width 4)
+	     (turn-on-font-lock)))
+
+;; Use cperl mode
+(defalias 'perl-mode 'cperl-mode)
+
+;; Auto byte compile this init file for faster startup
+(defun byte-compile-user-init-file ()
+  (let ((byte-compile-warnings '(unresolved)))
+    ;; in case compilation fails, don't leave the old .elc around:
+    (when (file-exists-p (concat user-init-file ".elc"))
+      (delete-file (concat user-init-file ".elc")))
+    (byte-compile-file user-init-file)
+    ;; (message "%s compiled" user-init-file)
+    ))
+(defun my-emacs-lisp-mode-hook ()
+  (when (equal buffer-file-name user-init-file)
+    (add-hook 'after-save-hook 'byte-compile-user-init-file t t)))
+;; (add-hook 'emacs-lisp-mode-hook 'turn-on-eldoc-mode)
+(add-hook 'emacs-lisp-mode-hook 'my-emacs-lisp-mode-hook)
+
+;; fix scrolling ;;Copied from pvarun
+(setq scroll-margin 0)
+(setq scroll-step 1)
+(setq scroll-conservatively 10000)
+(setq scroll-preserve-screen-position 1)
+
+;; highlight current line
+;;(global-hl-line-mode t)
+;;Display line number at left
+(global-linum-mode t)
+
+;; intelligent C-a ;; copied from pvarun
+(defun smarter-move-beginning-of-line (arg)
+  (interactive "^p")
+  (setq arg (or arg 1))
+
+  (when (/= arg 1)
+    (let ((line-move-visual nil))
+      (forward-line (1- arg))))
+
+  (let ((orig-point (point)))
+    (back-to-indentation)
+    (when (= orig-point (point))
+      (move-beginning-of-line 1))))
+
+(global-set-key [remap move-beginning-of-line] 'smarter-move-beginning-of-line)
+
+;;(global-unset-key "\C-x w")
+;;(global-set-key "\C-x w" 'global-whitespace-mode)
+;;(global-unset-key "\C-x t")
+;;(global-set-key "\C-x t" 'global-whitespace-toggle-options)
+(global-set-key (kbd "C-x w") 'global-whitespace-mode)
+(global-set-key (kbd "C-x t") 'global-whitespace-toggle-options)
+
+;;(global-set-key (kbd "M \;") 'comment-or-uncomment-region)
+(global-set-key "\M-c" 'comment-or-uncomment-region)
+
+(put 'narrow-to-region 'disabled nil)
+;; yes-or-no
+(fset 'yes-or-no-p 'y-or-n-p)
+
+;;SNB - ctags addition
+(setq path-to-ctags "/usr/bin/ctags") ;; <- your ctags path here
+(defun create-tags (dir-name)
+  "Create tags file."
+  (interactive "DDirectory: ")
+  (shell-command
+   (format "%s -f TAGS -e -R %s" path-to-ctags (directory-file-name dir-name)))
+  )
+(global-set-key (kbd "M-p") 'find-tag)
+(global-set-key (kbd "M-5") 'tags-search)
+(global-set-key (kbd "M-]") 'tags-loop-continue)
+'(highlight-symbol-face ((((type tty)) :background "white" :foreground "black") (((class color) (background dark)) :background "gray30" :foreground "#AD0DE2FAFFFF") (((class color) (background light)) :background "gray90")))
