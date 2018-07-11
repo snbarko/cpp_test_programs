@@ -1,12 +1,20 @@
+// C++ Program to have a logic where there can be max MAXNODES objects of a
+// class type node possible in the program. There is a thread which generates
+// the nodes from 1 to MAXNODES and keeps it in a hash and LRU list. MAXNODES
+// number of threads randomly does lookup of a node where it does some work
+// on/using that node. A LRU thread goes through LRU list and if number of
+// nodes are above a THRESHOLD, it picks one by one node from front and tries
+// to delete the node. There should not be any user of node when it is being
+// thrown away from LRU (and hash).
 #include <iostream>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/intrusive_ptr.hpp>
-#include    <boost/intrusive/list.hpp>
-#include    <boost/noncopyable.hpp>
-#include    <boost/scoped_ptr.hpp>
-#include    <boost/thread/mutex.hpp>
-#include    <boost/thread/thread.hpp>
+#include <boost/intrusive/list.hpp>
+#include <boost/noncopyable.hpp>
+#include <boost/scoped_ptr.hpp>
+#include <boost/thread/mutex.hpp>
+#include <boost/thread/thread.hpp>
 #include <boost/unordered_map.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread/thread.hpp> 
@@ -15,10 +23,17 @@ using namespace std;
 
 #define MAXNODES 10
 #define THRESHOLD (0.5 * MAXNODES)
-typedef boost::intrusive::list_base_hook<
-    boost::intrusive::link_mode<
-        boost::intrusive::auto_unlink> >            auto_unlink_hook;
- 
+
+
+class node;
+
+typedef boost::intrusive::list_base_hook <boost::intrusive::link_mode<
+        boost::intrusive::auto_unlink> >              auto_unlink_hook;
+typedef boost::intrusive::list<node,
+        boost::intrusive::constant_time_size<false> > NodeList;
+typedef boost::unordered_map <int, node*>             HashType;
+typedef boost::intrusive_ptr <node>                   nodePtr;
+
 class node:
     public boost::noncopyable,
     public auto_unlink_hook
@@ -38,21 +53,28 @@ public:
     
     ~node();
     int inodenumber() { return inodeNo; }
+
+    int refCnt;
 private:
     int inodeNo;
-public:
-    int refCnt;
 };
 
-typedef boost::intrusive::list<node,
-                               boost::intrusive::constant_time_size<false> >       NodeList;
+// LRU list
 NodeList nodeLRUList;
+
+// Mutex protecting LRU insert/delete operations
 boost::mutex nodeLRUMutex;
+
+// Current node count
 int nodeCount;
-typedef boost::unordered_map<int, node*>       HashType;
-typedef boost::intrusive_ptr <node> nodePtr;
+
+// Hash to hold valid nodes
 HashType nodeHash;
+
+// Mutex to protect hash
 boost::mutex nodeHashMutex;
+
+// Shutdown flag
 volatile bool shutdown = false;
 
 bool findNodeInHash(int INo, nodePtr& node, bool log = false)
@@ -92,7 +114,7 @@ void node::_init()
     }
     {
         boost::mutex::scoped_lock lock(nodeLRUMutex);
-        nodeLRUList.push_back(this);
+        // nodeLRUList.push_back(this);
     }
     nodeCount++;
 }
@@ -163,9 +185,7 @@ void lruThread()
         }
 
         boost::mutex::scoped_lock lock(nodeLRUMutex);
-        node *node = nodeLRUList.front();
-
-        
+        // node *node = nodeLRUList.front();
     }
 }
 
