@@ -41,9 +41,9 @@ int main()
     boost::intrusive_ptr<snb::A> a(new snb::A(11));
 
     a->display();
-    // boost::intrusive_ptr<snb::A> b(a);
-    // a->display();
-    // b->display();
+    boost::intrusive_ptr<snb::A> b(a);
+    a->display();
+    b->display();
     
     return 0;
 }

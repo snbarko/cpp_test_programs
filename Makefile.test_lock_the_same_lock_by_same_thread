@@ -1,0 +1,1 @@
+g++ test_boost_lock_guard.cpp  -lboost_thread -lboost_system -g
