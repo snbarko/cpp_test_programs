@@ -40,12 +40,12 @@ class node:
 {
 public:
     void _init();
-    node():inodeNo(99199),refCnt(0)
+    node():refCnt(0),inodeNo(99199)
     {
         cout << "node constructor" << endl;
         _init();
     }
-    node(int iNo):inodeNo(iNo),refCnt(0)
+    node(int iNo):refCnt(0),inodeNo(iNo)
     {
         // cout << "node constructor 1" << endl;
         _init();
