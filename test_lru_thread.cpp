@@ -1,6 +1,6 @@
 // C++ Program to have a logic where there can be max MAXNODES objects of a
 // class type node possible in the program. There is a thread which generates
-// the nodes from 1 to MAXNODES and keeps it in a hash and LRU list. MAXNODES
+// the nodes from 1 to MAXNODES and keeps it in a hash and LRU list. MAXTHREADS
 // number of threads randomly does lookup of a node where it does some work
 // on/using that node. A LRU thread goes through LRU list and if number of
 // nodes are above a THRESHOLD, it picks one by one node from front and tries
@@ -22,8 +22,8 @@
 using namespace std;
 
 #define MAXNODES 10
-#define THRESHOLD (0.5 * MAXNODES)
-
+#define THRESHOLD (MAXNODES / 2)
+#define MAXTHREADS 20
 
 class node;
 
@@ -66,7 +66,7 @@ NodeList nodeLRUList;
 boost::mutex nodeLRUMutex;
 
 // Current node count
-int nodeCount;
+volatile int nodeCount;
 
 // Hash to hold valid nodes
 HashType nodeHash;
@@ -100,7 +100,8 @@ void cleanupHash()
     boost::mutex::scoped_lock lock(nodeHashMutex);
     while (!nodeHash.empty()) {
         HashType::iterator it = nodeHash.begin();
-        nodeHash.erase(it->second->inodenumber());
+        cout << "SNB cleaning hash inode " << it->second->inodenumber() << endl;
+        // nodeHash.erase(it->second->inodenumber());
         delete it->second;
     }
 }
@@ -114,7 +115,7 @@ void node::_init()
     }
     {
         boost::mutex::scoped_lock lock(nodeLRUMutex);
-        // nodeLRUList.push_back(this);
+        nodeLRUList.push_back(*this);
     }
     nodeCount++;
 }
@@ -122,11 +123,14 @@ void node::_init()
 node::~node()
 {
     cout << "node destructor inode " << inodenumber() << endl;
+    nodeCount--;
+    nodeHash.erase(this->inodeNo);
 }
 
 void intrusive_ptr_add_ref(node *n)
 {
-    int a = n->refCnt++;
+    boost::mutex::scoped_lock lock(nodeLRUMutex);
+    int a = ++n->refCnt;
     if (a == 1) {
         cout << n->inodenumber() << " intrusive_ptr_add_ref " << a << endl;
     }
@@ -134,7 +138,7 @@ void intrusive_ptr_add_ref(node *n)
 
 void intrusive_ptr_release(node *n)
 {
-
+    boost::mutex::scoped_lock lock(nodeLRUMutex);
     if (0 == --n->refCnt) {
         cout << n->inodenumber() << " intrusive_ptr_release " << n->refCnt << endl;
         //delete n;
@@ -170,30 +174,60 @@ void prepareNodes()
             cout << "need to add a node " << i << " to hash" << endl;
             boost::intrusive_ptr <node> A =  new node(i);
         }
-        if (++i > MAXNODES)
-            i = 1;
+        if (++i > MAXNODES) {
+            i = 1;break;}
         boost::this_thread::sleep(boost::posix_time::milliseconds(100));
     }
 }
 
+void collapseNode(node &node)
+{
+    if (node.refCnt >  1) {
+        cout << "SNB some other thread has taken ref on node " << node.inodenumber() << endl;
+        goto abort;
+    }
+    {
+        boost::mutex::scoped_lock lock(nodeHashMutex);
+
+        if (node.refCnt >  1) {
+            cout << "SNB some other thread has taken ref on node after hash lock " << node.inodenumber() << endl;
+            goto abort;
+        }
+    }
+
+    delete &node;
+
+    return;
+ abort:
+    intrusive_ptr_release(&node);
+}
+
 void lruThread()
 {
+    node *frontNode = NULL;
     while (!shutdown) {
         if (nodeCount <= THRESHOLD) {
             boost::this_thread::sleep(boost::posix_time::milliseconds(2000));
             continue;
         }
 
-        boost::mutex::scoped_lock lock(nodeLRUMutex);
-        // node *node = nodeLRUList.front();
+        {
+            boost::mutex::scoped_lock lock(nodeLRUMutex);
+            frontNode = &nodeLRUList.front();
+            cout << "SNB node at front is " << frontNode->inodenumber() << " ref " << frontNode->refCnt << " nodecount " << nodeCount << endl;
+            nodeLRUList.pop_front();
+            ++frontNode->refCnt;
+        }
+        if (frontNode)
+            collapseNode(*frontNode);
     }
 }
 
 int main ()
 {
     int i;
-    boost::scoped_ptr<boost::thread>        mThreads[MAXNODES];
-    for (i = 0; i < MAXNODES; i++) {
+    boost::scoped_ptr<boost::thread>        mThreads[MAXTHREADS];
+    for (i = 0; i < MAXTHREADS; i++) {
         mThreads[i].reset(new boost::thread(boost::bind(&random_io_thread,
                                                      i + 1)));
     }
@@ -201,12 +235,19 @@ int main ()
     boost::scoped_ptr<boost::thread>        mThreadp;
     mThreadp.reset(new boost::thread(boost::bind(&prepareNodes)));
 
+    boost::scoped_ptr<boost::thread>        mLRUThreadp;
+    mLRUThreadp.reset(new boost::thread(boost::bind(&lruThread)));
+
     boost::this_thread::sleep(boost::posix_time::milliseconds(10000));
     shutdown = true;
-    for (i = 0; i < MAXNODES; i++) {
+    for (i = 0; i < MAXTHREADS; i++) {
         mThreads[i]->join();
         mThreads[i].reset();
     }
+    mThreadp->join();
+    mLRUThreadp->join();
+    mThreadp.reset();
+    mLRUThreadp.reset();
     cleanupHash();
 
     return 0;
