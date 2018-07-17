@@ -17,13 +17,16 @@
 #include <boost/thread/thread.hpp>
 #include <boost/unordered_map.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/thread/thread.hpp> 
+#include <boost/thread/thread.hpp>
+#include <boost/thread/pthread/condition_variable_fwd.hpp>
+#include <boost/smart_ptr/detail/atomic_count.hpp>
+
 
 using namespace std;
 
-#define MAXNODES 10
+#define MAXNODES 20000
 #define THRESHOLD (MAXNODES / 2)
-#define MAXTHREADS 20
+#define MAXTHREADS 100
 
 class node;
 
@@ -42,7 +45,7 @@ public:
     void _init();
     node():refCnt(0),inodeNo(99199)
     {
-        cout << "node constructor" << endl;
+        // cout << "node constructor" << endl;
         _init();
     }
     node(int iNo):refCnt(0),inodeNo(iNo)
@@ -53,10 +56,16 @@ public:
     
     ~node();
     int inodenumber() { return inodeNo; }
+    void specialLock();
+    void specialUnlock();
+    bool isSpecialLocked() const { return mSpecialBit;}
 
-    int refCnt;
+    boost::detail::atomic_count refCnt;
 private:
     int inodeNo;
+    uint32_t mSpecialBit : 1;
+    uint32_t mWaitSpecialBit:1;
+    uint32_t mReserved:30;
 };
 
 // LRU list
@@ -66,7 +75,7 @@ NodeList nodeLRUList;
 boost::mutex nodeLRUMutex;
 
 // Current node count
-volatile int nodeCount;
+boost::detail::atomic_count nodeCount(0);
 
 // Hash to hold valid nodes
 HashType nodeHash;
@@ -74,8 +83,35 @@ HashType nodeHash;
 // Mutex to protect hash
 boost::mutex nodeHashMutex;
 
+boost::condition_variable    specialCV;
+
 // Shutdown flag
 volatile bool shutdown = false;
+
+void node::specialLock()
+{
+    boost::unique_lock<boost::mutex> hashLock(nodeHashMutex);
+
+    while (mSpecialBit)
+    {
+        mWaitSpecialBit = 1;
+        specialCV.wait(hashLock);
+    }
+
+    mSpecialBit = 1;
+}
+
+void node::specialUnlock()
+{
+    boost::unique_lock<boost::mutex> hashLock(nodeHashMutex);
+
+    mSpecialBit = 0;
+    if (mWaitSpecialBit)
+    {
+        mWaitSpecialBit = 0;
+        specialCV.notify_all();
+    }
+}
 
 bool findNodeInHash(int INo, nodePtr& node, bool log = false)
 {
@@ -100,7 +136,7 @@ void cleanupHash()
     boost::mutex::scoped_lock lock(nodeHashMutex);
     while (!nodeHash.empty()) {
         HashType::iterator it = nodeHash.begin();
-        cout << "SNB cleaning hash inode " << it->second->inodenumber() << endl;
+        // cout << "SNB cleaning hash inode " << it->second->inodenumber() << endl;
         // nodeHash.erase(it->second->inodenumber());
         delete it->second;
     }
@@ -113,26 +149,25 @@ void node::_init()
         // cout << "Added " << this->inodeNo << " to hash" << endl;
         nodeHash.insert(HashType::value_type(this->inodeNo, this));
     }
-    {
-        boost::mutex::scoped_lock lock(nodeLRUMutex);
-        nodeLRUList.push_back(*this);
-    }
-    nodeCount++;
+    ++nodeCount;
 }
 
 node::~node()
 {
-    cout << "node destructor inode " << inodenumber() << endl;
-    nodeCount--;
+    // cout << "node destructor inode " << inodenumber() << endl;
+    --nodeCount;
     nodeHash.erase(this->inodeNo);
 }
 
 void intrusive_ptr_add_ref(node *n)
 {
     boost::mutex::scoped_lock lock(nodeLRUMutex);
-    int a = ++n->refCnt;
-    if (a == 1) {
-        cout << n->inodenumber() << " intrusive_ptr_add_ref " << a << endl;
+    // int a = ++n->refCnt;
+    // if (a == 1) {
+    //     cout << n->inodenumber() << " intrusive_ptr_add_ref " << a << endl;
+    if (++n->refCnt == 1) {
+        n->auto_unlink_hook::unlink();
+        cout << n->inodenumber() << " intrusive_ptr_add_ref " << 1 << endl;
     }
 }
 
@@ -141,7 +176,7 @@ void intrusive_ptr_release(node *n)
     boost::mutex::scoped_lock lock(nodeLRUMutex);
     if (0 == --n->refCnt) {
         cout << n->inodenumber() << " intrusive_ptr_release " << n->refCnt << endl;
-        //delete n;
+        nodeLRUList.push_back(*n);
     }
 }
 
@@ -157,7 +192,7 @@ void random_io_thread(int threadNo)
             // Use it for some time
             cout << "Using inode " << i << " ref " << node->refCnt << " by thread " << threadNo << endl;
         }
-        boost::this_thread::sleep(boost::posix_time::milliseconds(1000 * threadNo));
+        // boost::this_thread::sleep(boost::posix_time::milliseconds(1000 * threadNo));
         if (++i > MAXNODES)
             i = 1;
     }
@@ -171,26 +206,26 @@ void prepareNodes()
     while (!shutdown) {
         nodePtr node1;
         if (findNodeInHash(i, node1) == false) {
-            cout << "need to add a node " << i << " to hash" << endl;
+            // cout << "need to add a node " << i << " to hash" << endl;
             boost::intrusive_ptr <node> A =  new node(i);
         }
         if (++i > MAXNODES) {
             i = 1;break;}
-        boost::this_thread::sleep(boost::posix_time::milliseconds(100));
+        // boost::this_thread::sleep(boost::posix_time::milliseconds(100));
     }
 }
 
 void collapseNode(node &node)
 {
     if (node.refCnt >  1) {
-        cout << "SNB some other thread has taken ref on node " << node.inodenumber() << endl;
+        // cout << "SNB some other thread has taken ref on node " << node.inodenumber() << endl;
         goto abort;
     }
     {
         boost::mutex::scoped_lock lock(nodeHashMutex);
 
         if (node.refCnt >  1) {
-            cout << "SNB some other thread has taken ref on node after hash lock " << node.inodenumber() << endl;
+            // cout << "SNB some other thread has taken ref on node after hash lock " << node.inodenumber() << endl;
             goto abort;
         }
     }
@@ -214,7 +249,7 @@ void lruThread()
         {
             boost::mutex::scoped_lock lock(nodeLRUMutex);
             frontNode = &nodeLRUList.front();
-            cout << "SNB node at front is " << frontNode->inodenumber() << " ref " << frontNode->refCnt << " nodecount " << nodeCount << endl;
+            // cout << "SNB node at front is " << frontNode->inodenumber() << " ref " << frontNode->refCnt << " nodecount " << nodeCount << endl;
             nodeLRUList.pop_front();
             ++frontNode->refCnt;
         }
