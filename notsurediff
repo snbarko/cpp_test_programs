@@ -1,0 +1,203 @@
+diff --git a/test_lru_thread.cpp b/test_lru_thread.cpp
+index a7e4257..54cc42b 100644
+--- a/test_lru_thread.cpp
++++ b/test_lru_thread.cpp
+@@ -28,6 +28,86 @@ using namespace std;
+ #define THRESHOLD (MAXNODES / 2)
+ #define MAXTHREADS 100
+ 
++class snbmutex : public boost::mutex
++{
++public:
++    void lock()
++    {
++        std::cout << "SNB lock came thread " << boost::this_thread::get_id() << std::endl;
++        if (!isLockedByCaller()) {
++            boost::mutex::lock();
++            // s.lock();
++            m_holder = boost::this_thread::get_id();
++            m_actual_holder = m_holder;
++            std::cout << "SNB locking now " << m_holder << std::endl;
++        } else {
++            std::cout << "SNB already locked by this thread" << m_holder << std::endl;
++        }
++    }
++    void unlock()
++    {
++        std::cout << "SNB unlock no flag" << m_holder << std::endl;
++        m_holder = boost::thread::id();
++        boost::mutex::unlock();
++        // s.unlock();
++    }
++ 
++    bool amIOwner()
++    {
++        bool returnme = actualHolder();
++        if (returnme == true)
++            m_actual_holder = boost::thread::id();
++        return returnme;
++    }
++private:
++    bool isLockedByCaller()
++    {
++        return m_holder == boost::this_thread::get_id();
++    }
++    bool actualHolder()
++    {
++        return m_actual_holder == boost::this_thread::get_id();
++    }
++    boost::thread::id m_holder;
++    boost::thread::id m_actual_holder;
++    // boost::mutex s;
++};
++
++class snb_unique_lock // : public boost::unique_lock<snbmutex>
++{
++public:
++    snb_unique_lock(snbmutex &s):lock(s, boost::defer_lock_t())
++    // :boost::unique_lock<snbmutex>(s, boost::defer_lock_t())
++    {
++        mtx = &s;
++        mtx->lock();
++        lock_owner = mtx->amIOwner();
++        std::cout << "SNB did I lock the mutex?" << lock_owner << std::endl;
++    }
++    ~snb_unique_lock()
++    {
++        if (lock_owner) {
++            std::cout << "calling unlock" << std::endl;
++            mtx->unlock();
++        } else {
++            std::cout << "Not calling unlock" << std::endl;
++        }
++    }
++    // boost::unique_lock<snbmutex>& uniq_lk()
++    // {
++    //     return lock;
++    // }
++    // bool owns_lock() const BOOST_NOEXCEPT
++    // {
++    //     return lock_owner;
++    // }
++
++private:
++    bool lock_owner;
++    snbmutex *mtx;
++    boost::unique_lock<boost::mutex> lock;
++};
++
+ class node;
+ 
+ typedef boost::intrusive::list_base_hook <boost::intrusive::link_mode<
+@@ -81,7 +161,8 @@ boost::detail::atomic_count nodeCount(0);
+ HashType nodeHash;
+ 
+ // Mutex to protect hash
+-boost::mutex nodeHashMutex;
++// boost::mutex nodeHashMutex;
++snbmutex nodeHashMutex;
+ 
+ boost::condition_variable    specialCV;
+ 
+@@ -90,12 +171,17 @@ volatile bool shutdown = false;
+ 
+ void node::specialLock()
+ {
+-    boost::unique_lock<boost::mutex> hashLock(nodeHashMutex);
++    cout << "Going to take hash lock" << endl;
++    snb_unique_lock hashLock(nodeHashMutex);
++    // boost::unique_lock<boost::mutex> onlyLock(nodeHashMutex,  boost::defer_lock_t());
++
++    cout << "taken hash lock" << endl;
+ 
+     while (mSpecialBit)
+     {
+         mWaitSpecialBit = 1;
+-        specialCV.wait(hashLock);
++
++        specialCV.wait(onlyLock);
+     }
+ 
+     mSpecialBit = 1;
+@@ -103,7 +189,10 @@ void node::specialLock()
+ 
+ void node::specialUnlock()
+ {
+-    boost::unique_lock<boost::mutex> hashLock(nodeHashMutex);
++    cout << "UN Going to take hash lock" << endl;
++    snb_unique_lock hashLock(nodeHashMutex);
++    // boost::unique_lock<boost::mutex> hashLock(nodeHashMutex,  boost::defer_lock_t());
++    cout << "UN taken hash lock" << endl;
+ 
+     mSpecialBit = 0;
+     if (mWaitSpecialBit)
+@@ -116,7 +205,8 @@ void node::specialUnlock()
+ bool findNodeInHash(int INo, nodePtr& node, bool log = false)
+ {
+     {
+-        boost::mutex::scoped_lock lock(nodeHashMutex);
++        // boost::mutex::scoped_lock lock(nodeHashMutex);
++        snb_unique_lock lock(nodeHashMutex);
+         HashType::iterator it = nodeHash.find(INo);
+         if (it != nodeHash.end()) {
+             node.reset(it->second);
+@@ -133,7 +223,8 @@ bool findNodeInHash(int INo, nodePtr& node, bool log = false)
+ 
+ void cleanupHash()
+ {
+-    boost::mutex::scoped_lock lock(nodeHashMutex);
++    // boost::mutex::scoped_lock lock(nodeHashMutex);
++    snb_unique_lock lock(nodeHashMutex);
+     while (!nodeHash.empty()) {
+         HashType::iterator it = nodeHash.begin();
+         // cout << "SNB cleaning hash inode " << it->second->inodenumber() << endl;
+@@ -145,7 +236,8 @@ void cleanupHash()
+ void node::_init()
+ {
+     {
+-        boost::mutex::scoped_lock lock(nodeHashMutex);
++        // boost::mutex::scoped_lock lock(nodeHashMutex);
++        snb_unique_lock lock(nodeHashMutex);
+         // cout << "Added " << this->inodeNo << " to hash" << endl;
+         nodeHash.insert(HashType::value_type(this->inodeNo, this));
+     }
+@@ -161,23 +253,27 @@ node::~node()
+ 
+ void intrusive_ptr_add_ref(node *n)
+ {
+-    boost::mutex::scoped_lock lock(nodeLRUMutex);
++    n->specialLock();
+     // int a = ++n->refCnt;
+     // if (a == 1) {
+     //     cout << n->inodenumber() << " intrusive_ptr_add_ref " << a << endl;
+     if (++n->refCnt == 1) {
++        boost::mutex::scoped_lock lock(nodeLRUMutex);
+         n->auto_unlink_hook::unlink();
+         cout << n->inodenumber() << " intrusive_ptr_add_ref " << 1 << endl;
+     }
++    n->specialUnlock();
+ }
+ 
+ void intrusive_ptr_release(node *n)
+ {
+-    boost::mutex::scoped_lock lock(nodeLRUMutex);
++    n->specialLock();
+     if (0 == --n->refCnt) {
++        boost::mutex::scoped_lock lock(nodeLRUMutex);
+         cout << n->inodenumber() << " intrusive_ptr_release " << n->refCnt << endl;
+         nodeLRUList.push_back(*n);
+     }
++    n->specialUnlock();
+ }
+ 
+ void random_io_thread(int threadNo)
+@@ -222,7 +318,8 @@ void collapseNode(node &node)
+         goto abort;
+     }
+     {
+-        boost::mutex::scoped_lock lock(nodeHashMutex);
++        // boost::mutex::scoped_lock lock(nodeHashMutex);
++        snb_unique_lock lock(nodeHashMutex);
+ 
+         if (node.refCnt >  1) {
+             // cout << "SNB some other thread has taken ref on node after hash lock " << node.inodenumber() << endl;
