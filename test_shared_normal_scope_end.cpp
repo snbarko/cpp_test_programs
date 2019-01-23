@@ -9,12 +9,17 @@ class A
 public:
     A(int dt)
     {
-        cout << "A constructor" << endl;
+        cout << "A constructor " << dt << endl;
         data = dt;
     }
+    A()
+    {
+        cout << "A constructor" << endl;
+    }
+
     ~A()
     {
-        cout << "A destructor" << endl;
+        cout << "A destructor " << data << endl;
     }
     int data;
 };
@@ -72,9 +77,12 @@ public:
 
 int main ()
 {
-    // boost::shared_ptr<A> a(new A);
+    boost::shared_ptr<A> a;
 
-    C c;
+    for (int i = 0; i < 5; i++) {
+        a.reset(new A(i));
+    }
+    // C c;
 
     return 0;
 }
