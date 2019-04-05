@@ -1,1 +1,1 @@
-g++ test_gmock.o -lpthread -lgtest -lgmock
+g++ test_gmock.cpp -lpthread -lgtest -lgmock

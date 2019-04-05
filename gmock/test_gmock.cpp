@@ -4,6 +4,8 @@
 
 using ::testing::Return;
 using ::testing::_;
+using ::testing::Throw;
+
 class Foo
 {
 public:
@@ -30,7 +32,15 @@ public:
     Order(int data) : mydata(data) { }
     bool Calculate(Foo* myFoo)
     {
-        return myFoo->Add(mydata);
+        try
+        {
+            return myFoo->Add(mydata);
+        }
+        catch( ... )
+        {
+            std::cout << "Exception caught " << std::endl;
+            return false;
+        }
     }
 private:
     int mydata;
@@ -39,13 +49,21 @@ private:
 TEST(OrderTest, Calculate)
 {
     MockFoo fooMe;
-    Order od(55);
     EXPECT_CALL(fooMe, Add(55))
         .Times(1)
         .WillOnce(Return(true));
-    bool d = od.Calculate(&fooMe);
-    std::cout << "return from Add " << d << std::endl;
-    ASSERT_FALSE(d);
+    EXPECT_CALL(fooMe, Add(44))
+        .Times(1)
+        .WillOnce(Throw(std::bad_alloc()));
+    {
+        Order od(55);
+        ASSERT_TRUE(od.Calculate(&fooMe));
+    }
+
+    {
+        Order od1(44);
+        ASSERT_FALSE(od1.Calculate(&fooMe));
+    }
 }
 
 int main(int argc, char *argv[])
