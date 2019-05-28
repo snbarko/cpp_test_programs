@@ -4,12 +4,12 @@
 class A
 {
 public:
-    // void* operator new(size_t siz, bool flag)
-    // {
-    //     std::cout << "New operator overloaded" << std::endl;
-    //     // return ::new A();
-    //     return malloc(sizeof(A));
-    // }
+    void* operator new(size_t siz, bool flag)
+    {
+        std::cout << "New operator overloaded" << std::endl;
+        // return ::new A();
+        return malloc(sizeof(A));
+    }
     // void* operator new(size_t siz)
     // {
     //     std::cout << "New operator overloaded 2" << std::endl;
@@ -36,16 +36,16 @@ private:
 
 int main()
 {
-    // bool flag = false;
-    // A *a = new (flag) A();
+    bool flag = false;
+    A *a = new (flag) A();
+    std::cout << "Barrier" << std::endl;
+    A *b = ::new A();
     // std::cout << "Barrier" << std::endl;
-    // A *b = new A();
-    // std::cout << "Barrier" << std::endl;
-    A c(33);
-    A* d = &c;
-    c.print();
-    d->print();
-    A* e = new (d) A(55);
-    e->print();
+    // A c(33);
+    // A* d = &c;
+    // c.print();
+    // d->print();
+    // A* e = new (d) A(55);
+    // e->print();
     return 0;
 }

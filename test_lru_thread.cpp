@@ -24,9 +24,10 @@
 
 using namespace std;
 
-#define MAXNODES 20000
+#define MAXNODES 100
 #define THRESHOLD (MAXNODES / 2)
-#define MAXTHREADS 100
+#define MAXTHREADS 2
+#define WAITTIME 10000
 
 class node;
 
@@ -56,9 +57,9 @@ public:
     
     ~node();
     int inodenumber() { return inodeNo; }
-    void specialLock();
-    void specialUnlock();
-    bool isSpecialLocked() const { return mSpecialBit;}
+    // void specialLock();
+    // void specialUnlock();
+    // bool isSpecialLocked() const { return mSpecialBit;}
 
     boost::detail::atomic_count refCnt;
 private:
@@ -88,30 +89,30 @@ boost::condition_variable    specialCV;
 // Shutdown flag
 volatile bool shutdown = false;
 
-void node::specialLock()
-{
-    boost::unique_lock<boost::mutex> hashLock(nodeHashMutex);
+// void node::specialLock()
+// {
+//     boost::unique_lock<boost::mutex> hashLock(nodeHashMutex);
 
-    while (mSpecialBit)
-    {
-        mWaitSpecialBit = 1;
-        specialCV.wait(hashLock);
-    }
+//     while (mSpecialBit)
+//     {
+//         mWaitSpecialBit = 1;
+//         specialCV.wait(hashLock);
+//     }
 
-    mSpecialBit = 1;
-}
+//     mSpecialBit = 1;
+// }
 
-void node::specialUnlock()
-{
-    boost::unique_lock<boost::mutex> hashLock(nodeHashMutex);
+// void node::specialUnlock()
+// {
+//     boost::unique_lock<boost::mutex> hashLock(nodeHashMutex);
 
-    mSpecialBit = 0;
-    if (mWaitSpecialBit)
-    {
-        mWaitSpecialBit = 0;
-        specialCV.notify_all();
-    }
-}
+//     mSpecialBit = 0;
+//     if (mWaitSpecialBit)
+//     {
+//         mWaitSpecialBit = 0;
+//         specialCV.notify_all();
+//     }
+// }
 
 bool findNodeInHash(int INo, nodePtr& node, bool log = false)
 {
@@ -167,7 +168,7 @@ void intrusive_ptr_add_ref(node *n)
     //     cout << n->inodenumber() << " intrusive_ptr_add_ref " << a << endl;
     if (++n->refCnt == 1) {
         n->auto_unlink_hook::unlink();
-        cout << n->inodenumber() << " intrusive_ptr_add_ref " << 1 << endl;
+        // cout << n->inodenumber() << " intrusive_ptr_add_ref " << 1 << endl;
     }
 }
 
@@ -175,7 +176,7 @@ void intrusive_ptr_release(node *n)
 {
     boost::mutex::scoped_lock lock(nodeLRUMutex);
     if (0 == --n->refCnt) {
-        cout << n->inodenumber() << " intrusive_ptr_release " << n->refCnt << endl;
+        // cout << n->inodenumber() << " intrusive_ptr_release " << n->refCnt << endl;
         nodeLRUList.push_back(*n);
     }
 }
@@ -191,6 +192,10 @@ void random_io_thread(int threadNo)
         {
             // Use it for some time
             cout << "Using inode " << i << " ref " << node->refCnt << " by thread " << threadNo << endl;
+        }
+        else
+        {
+            cout << "inode not found " << i << " by thread " << threadNo << endl;
         }
         // boost::this_thread::sleep(boost::posix_time::milliseconds(1000 * threadNo));
         if (++i > MAXNODES)
@@ -209,8 +214,14 @@ void prepareNodes()
             // cout << "need to add a node " << i << " to hash" << endl;
             boost::intrusive_ptr <node> A =  new node(i);
         }
+        else
+        {
+            // cout << "node " << i << " found in hash" << endl;
+        }
         if (++i > MAXNODES) {
-            i = 1;break;}
+            i = 1;
+            break;
+        }
         // boost::this_thread::sleep(boost::posix_time::milliseconds(100));
     }
 }
@@ -249,7 +260,7 @@ void lruThread()
         {
             boost::mutex::scoped_lock lock(nodeLRUMutex);
             frontNode = &nodeLRUList.front();
-            // cout << "SNB node at front is " << frontNode->inodenumber() << " ref " << frontNode->refCnt << " nodecount " << nodeCount << endl;
+            cout << "SNB node at front is " << frontNode->inodenumber() << " ref " << frontNode->refCnt << " nodecount " << nodeCount << endl;
             nodeLRUList.pop_front();
             ++frontNode->refCnt;
         }
@@ -262,18 +273,21 @@ int main ()
 {
     int i;
     boost::scoped_ptr<boost::thread>        mThreads[MAXTHREADS];
+
+    boost::scoped_ptr<boost::thread>        mThreadp;
+    mThreadp.reset(new boost::thread(boost::bind(&prepareNodes)));
+
     for (i = 0; i < MAXTHREADS; i++) {
         mThreads[i].reset(new boost::thread(boost::bind(&random_io_thread,
                                                      i + 1)));
     }
 
-    boost::scoped_ptr<boost::thread>        mThreadp;
-    mThreadp.reset(new boost::thread(boost::bind(&prepareNodes)));
+    boost::this_thread::sleep(boost::posix_time::milliseconds(2000));
 
     boost::scoped_ptr<boost::thread>        mLRUThreadp;
     mLRUThreadp.reset(new boost::thread(boost::bind(&lruThread)));
 
-    boost::this_thread::sleep(boost::posix_time::milliseconds(10000));
+    boost::this_thread::sleep(boost::posix_time::milliseconds(WAITTIME));
     shutdown = true;
     for (i = 0; i < MAXTHREADS; i++) {
         mThreads[i]->join();

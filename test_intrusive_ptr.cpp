@@ -1,5 +1,7 @@
 #include <iostream>
 #include <boost/intrusive_ptr.hpp>
+#include <vector>
+#include <boost/container/static_vector.hpp>
 
 namespace snb {
 class A
@@ -19,6 +21,7 @@ public:
     }
 private:
     int data;
+    char charme[1024];
 public:
     int refCount;
 };
@@ -36,6 +39,32 @@ public:
     }
 
 }
+
+void function(boost::intrusive_ptr<snb::A> c)
+{
+    c->display();
+    boost::intrusive_ptr<snb::A> d;
+    d = c;
+    c->display();
+    c->display();
+    boost::intrusive_ptr<snb::A> e;
+    e = d;
+    c->display();
+    d->display();
+    e->display();
+}
+
+class B
+{
+public:
+    B()
+    {
+    }
+private:
+    boost::intrusive_ptr<snb::A> data;
+};
+
+boost::container::static_vector<boost::intrusive_ptr<snb::A>, 10 > dVector;
 int main()
 {
     boost::intrusive_ptr<snb::A> a(new snb::A(11));
@@ -44,6 +73,16 @@ int main()
     boost::intrusive_ptr<snb::A> b(a);
     a->display();
     b->display();
-    
+
+    function(b);
+
+    std::cout << sizeof(B) << std::endl;
+    b->display();
+    std::cout << sizeof(B) << std::endl;
+    dVector.emplace_back(a);
+    // dVector[0] = a;
+    std::cout << sizeof(B) << std::endl;
+    b->display();
+    dVector[0].get()->display();
     return 0;
 }
