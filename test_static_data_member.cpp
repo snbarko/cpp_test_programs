@@ -1,12 +1,23 @@
 #include <iostream>
 
+constexpr bool func(int a)
+{
+    if (a % 2)
+        return false;
+    else
+        return true;
+}
+
 class abc
 {
 private:
     static int a;
     static const int z = 77;
     static int y;
+    // static int x = 55; // Not allowerd inline initialization without const
 public:
+    static const int x = func(12) ? 12 : 13;
+
     abc()
     {
         std::cout << "This is constructor of the class" << std::endl;
@@ -16,7 +27,7 @@ public:
     int b;
     void print_value()
     {
-        std::cout << "Values a: " << a << " b: " << b << " " << z << " " << abc::y << std::endl;
+        std::cout << "Values a: " << a << " b: " << b << " z " << z << " y " << abc::y << " x " << x << std::endl;
     }
     static void print_static_value()
     {
@@ -31,6 +42,7 @@ void function1()
 
 int abc::a;
 int abc::y = 55;
+// int abc::x;
 
 int main ()
 {

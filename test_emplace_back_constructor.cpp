@@ -53,6 +53,11 @@ int main ()
     {
         it->display();
     }
+
+    for (auto& it1 : alist)
+    {
+        it1.display();
+    }
     
     return 0;
 }
