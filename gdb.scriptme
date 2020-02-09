@@ -1,0 +1,19 @@
+define pv
+    print $arg0.m_holder.m_size
+    set $start=$arg0.m_holder.m_start
+    set $i = 0
+    while($i < $arg0.m_holder.m_size)
+        # echo "actual start is"
+        # print $arg0.m_holder.m_start
+	# echo "start is"
+	# p $start
+	set $node = $start + $i
+	# echo "node is "
+	# print $node
+	# echo "expected address "
+	# print /x $start + $factor
+	echo "node is "
+	print **(A**)$node
+	set $i = $i + 1
+        end
+    

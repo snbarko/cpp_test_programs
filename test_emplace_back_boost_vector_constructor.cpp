@@ -56,8 +56,26 @@ int main ()
     for (int i = 0; i < 4; i++)
     {
         A *a = new A(num1, num2, charme);
-        alist.emplace_back(*a);
+        std::cout << "New done " << a <<  std::endl;
+        // alist.emplace_back(*a);
         blist.emplace_back(a);
+        // std::cout << alist[i] << std::endl;
+        // std::cout << &alist[i] << std::endl;
+        std::cout << "blist[" << i << "]" << blist[i] << std::endl;
+        std::cout << "&blist[" << i << "]" << &blist[i] << std::endl;
+        // std::cout << *blist[i] << std::endl;
+        // std::cout << "start " << blist.m_holder.m_start << std::endl;
+        
+        num1++;num2++;charme++;
+    }
+
+    std::cout << "PRINTME" << std::endl;
+
+    for (int i = 0; i < 4; i++)
+    {
+        std::cout << "blist[" << i << "]" << blist[i] << std::endl;
+        std::cout << "&blist[" << i << "]" << &blist[i] << std::endl;
+        
         num1++;num2++;charme++;
     }
 
