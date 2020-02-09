@@ -29,7 +29,8 @@ public:
 
     void start()
     {
-        myptr.reset(new int);
+        myptr.reset(new int(11));
+        std::cout << "scoped ptr addr " << &myptr << " raw " << myptr.get() << " value " << *( myptr.get()) << std::endl;
     }
 
     void stop()
@@ -38,7 +39,8 @@ public:
     }
 
 private:
-    boost::scoped_ptr<def> myptr;
+    // boost::scoped_ptr<def> myptr;
+    boost::scoped_ptr<int> myptr;
 };
 
 int main()

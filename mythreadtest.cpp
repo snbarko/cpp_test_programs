@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <csignal>
+#include <stdlib.h>
 
 int threadno = 0;
 pthread_t th1, th2;

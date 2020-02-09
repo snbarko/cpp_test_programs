@@ -1,4 +1,5 @@
 #include <iostream>
+#include "boost/container/vector.hpp"
 #include "boost/container/static_vector.hpp"
 
 class A
@@ -37,10 +38,11 @@ private:
 };
 
 typedef boost::container::static_vector<A, 5> AList;
-typedef boost::container::static_vector<A*, 5> BList;
 
 int main ()
 {
+    typedef boost::container::vector<A*> BList;
+
     AList alist;
     BList blist;
 
@@ -66,9 +68,9 @@ int main ()
         it->display();
     }
 
-    for (auto& it1 : alist)
+    for (auto& it1 : blist)
     {
-        it1.display();
+        it1->display();
     }
     
     return 0;
