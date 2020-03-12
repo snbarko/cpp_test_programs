@@ -85,6 +85,7 @@ public:
                 return -1;
             }
         }
+        return 0;
     }
 
 private:
@@ -182,7 +183,7 @@ int readFile(uint64_t dir, uint64_t file)
 
 int fillDir()
 {
-    
+    return 0;
 }
 
 int main(int argc, char* argv[])
