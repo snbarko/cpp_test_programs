@@ -11,7 +11,7 @@
 #define ENDSIGNATURE   0xEDD51CAE1FDECBA0
 
 #define MAXSUBBLOCKS   1024
-#define MAXBLOCKS      (16)// * 1024)
+#define MAXBLOCKS      (32)// * 1024)
 
 class SubBlockPattern
 {
@@ -40,7 +40,43 @@ public:
             (mSubBlock       != subBlockNo) ||
             (mEndSignature   != ENDSIGNATURE))
         {
-            std::cout << "Wrong data in file" << std::endl;
+            printf("Wrong data in file. \tSTARTSIG:DIR:FILE:MIDSIG:OFF:BLOCK:SUBBLOCK:ENDSIG\nExpected\t %#lx:%#lx:%#lx:%#lx:%#lx:%#lx:%#lx:%#lx \nGot\t\t %#lx:%#lx:%#lx:%#lx:%#lx:%#lx:%#lx:%#lx\n",
+                   mStartSignature,
+                   mDirectoryNo,
+                   mFileNo,
+                   mMidSignature,
+                   mOffset,
+                   mBlockNo,
+                   mSubBlock,
+                   mEndSignature,
+                   STARTSIGNATURE,
+                   dir,
+                   file,
+                   MIDSIGNATURE,
+                   offset,
+                   block,
+                   subBlockNo,
+                   ENDSIGNATURE);
+
+            // std::cout << "Wrong data in file. Expected:" <<
+            //     mStartSignature << ":" <<
+            //     mDirectoryNo << ":" <<
+            //     mFileNo << ":" <<
+            //     mMidSignature << ":" <<
+            //     mOffset << ":" <<
+            //     mBlockNo << ":" <<
+            //     mSubBlock << ":" <<
+            //     mEndSignature << ":" <<
+            //     " Got:" <<
+            //     STARTSIGNATURE << ":" <<
+            //     dir << ":" <<
+            //     file << ":" <<
+            //     MIDSIGNATURE << ":" <<
+            //     offset << ":" <<
+            //     block << ":" <<
+            //     subBlockNo << ":" <<
+            //     ENDSIGNATURE << ":" <<
+            //     std::endl;
             return -1;
         }
 
@@ -76,16 +112,17 @@ public:
 
     int readVerifyBlock(uint64_t dir, uint64_t file, uint64_t block, uint64_t& offset)
     {
+        int status = 0;
         for(uint64_t i = 0; i < MAXSUBBLOCKS; i++)
         {
             offset = offset + sizeof(SubBlockPattern);
             SubBlockPattern& subBlock = mSubBlocks[i];
             if (subBlock.readVerifySubBLock(dir, file, block, i, offset))
             {
-                return -1;
+                status = -1;
             }
         }
-        return 0;
+        return status;
     }
 
 private:
@@ -157,6 +194,7 @@ int readFile(uint64_t dir, uint64_t file)
 
     BlockPattern* block = new BlockPattern();
     uint64_t offset = 0;
+    int status = 0;
 
     for (uint64_t i = 0; i < MAXBLOCKS; i++)
     {
@@ -169,8 +207,8 @@ int readFile(uint64_t dir, uint64_t file)
         }
         if (block->readVerifyBlock(dir, file, i, offset))
         {
+            status = -1;
             ret = -1;
-            break;
         }
     }
 
@@ -195,31 +233,32 @@ int main(int argc, char* argv[])
 
     int write = 1;
 
-    if (argc != 2)
+    if (argc != 3)
     {
         std::cout << "Arguments wrong or not provided. Usage: " << argv[0] << " 0 (write) OR 1(read)" <<  std::endl;
         return -1;
     }
 
     int read = atoi(argv[1]);
+    int file = atoi(argv[2]);
 
     if (read)
     {
-        if (readFile(1, 1))
+        if (readFile(1, file))
         {
-            std::cout << "Read file failed" << std::endl;
+            std::cout << "Read file failed file" << file << std::endl;
             return -1;
         }
-        std::cout << "Read and verify from file file1 done" << std::endl;
+        std::cout << "Read and verify from file " << file << " done" << std::endl;
     }
     else
     {
-        if (fillFile(1, 1))
+        if (fillFile(1, file))
         {
-            std::cout << "Fill file failed" << std::endl;
+            std::cout << "Fill file failed file" << file << std::endl;
             return -1;
         }
-        std::cout << "Writing to file file1 done" << std::endl;
+        std::cout << "Writing to file file" << file << " done" << std::endl;
     }
 
     return 0;
