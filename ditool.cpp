@@ -11,30 +11,33 @@
 #define ENDSIGNATURE   0xEDD51CAE1FDECBA0
 
 #define MAXSUBBLOCKS   1024
-#define MAXBLOCKS      (32)// * 1024)
+#define MAXBLOCKS      (320)// * 1024)
 
 class SubBlockPattern
 {
 public:
     SubBlockPattern() {}
-    void fillSubBLock(uint64_t dir, uint64_t file, uint64_t block, uint64_t subBlockNo, uint64_t offset)
+    void fillSubBLock(uint64_t dir, uint64_t file, uint64_t block, uint64_t subBlockNo, uint64_t offset, uint64_t number)
     {
         mStartSignature = STARTSIGNATURE;
         mDirectoryNo    = dir;
         mFileNo         = file;
-        mMidSignature   = MIDSIGNATURE;
+        if (number == 0)
+            mMidSignature   = MIDSIGNATURE;
+        else
+            mMidSignature = number;
         mOffset         = offset;
         mBlockNo        = block;
         mSubBlock       = subBlockNo;
         mEndSignature   = ENDSIGNATURE;
     }
 
-    int readVerifySubBLock(uint64_t dir, uint64_t file, uint64_t block, uint64_t subBlockNo, uint64_t offset)
+    int readVerifySubBLock(uint64_t dir, uint64_t file, uint64_t block, uint64_t subBlockNo, uint64_t offset, uint64_t number)
     {
         if ((mStartSignature != STARTSIGNATURE) ||
             (mDirectoryNo    != dir) ||
             (mFileNo         != file) ||
-            (mMidSignature   != MIDSIGNATURE) ||
+            (number ? (mMidSignature   != number) : (mMidSignature != MIDSIGNATURE)) ||
             (mOffset         != offset) ||
             (mBlockNo        != block) ||
             (mSubBlock       != subBlockNo) ||
@@ -52,7 +55,7 @@ public:
                    STARTSIGNATURE,
                    dir,
                    file,
-                   MIDSIGNATURE,
+                   number ? number : MIDSIGNATURE,
                    offset,
                    block,
                    subBlockNo,
@@ -100,28 +103,29 @@ class BlockPattern
 public:
     BlockPattern() {}
     
-    void fillBlock(uint64_t dir, uint64_t file, uint64_t block, uint64_t& offset)
+    void fillBlock(uint64_t dir, uint64_t file, uint64_t block, uint64_t& offset, uint64_t number)
     {
         for(uint64_t i = 0; i < MAXSUBBLOCKS; i++)
         {
-            offset = offset + sizeof(SubBlockPattern);
             SubBlockPattern& subBlock = mSubBlocks[i];
-            subBlock.fillSubBLock(dir, file, block, i, offset);
+            subBlock.fillSubBLock(dir, file, block, i, offset, number);
+            offset = offset + sizeof(SubBlockPattern);
         }
     }
 
-    int readVerifyBlock(uint64_t dir, uint64_t file, uint64_t block, uint64_t& offset)
+    int readVerifyBlock(uint64_t dir, uint64_t file, uint64_t block, uint64_t& offset, uint64_t number)
     {
         int status = 0;
         for(uint64_t i = 0; i < MAXSUBBLOCKS; i++)
         {
-            offset = offset + sizeof(SubBlockPattern);
             SubBlockPattern& subBlock = mSubBlocks[i];
-            if (subBlock.readVerifySubBLock(dir, file, block, i, offset))
+            if (subBlock.readVerifySubBLock(dir, file, block, i, offset, number))
             {
                 status = -1;
+                break;          // remove this
             }
-        }
+            offset = offset + sizeof(SubBlockPattern);
+         }
         return status;
     }
 
@@ -129,7 +133,7 @@ private:
     SubBlockPattern mSubBlocks[MAXSUBBLOCKS];
 };
 
-int fillFile(uint64_t dir, uint64_t file)
+int fillFile(uint64_t dir, uint64_t file, uint64_t number)
 {
     int ret = 0;
 
@@ -142,11 +146,13 @@ int fillFile(uint64_t dir, uint64_t file)
 
     sprintf(filename, "file%lu", file);
 
-    int fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    int fd = open(filename, O_RDWR | O_CREAT | O_TRUNC | O_DIRECT, S_IRUSR | S_IWUSR);
 
     if(fd < 0)
     {
         fd = open(filename, O_RDONLY);
+
+        std::cout << "Opening another time" << std::endl;
 
         if (fd < 0)
         {
@@ -160,8 +166,26 @@ int fillFile(uint64_t dir, uint64_t file)
 
     for (uint64_t i = 0; i < MAXBLOCKS; i++)
     {
-        block->fillBlock(dir, file, i, offset);
-        write(fd, (void *)block, sizeof(BlockPattern));
+        memset(block, 0, sizeof(BlockPattern));
+        block->fillBlock(dir, file, i, offset, number);
+    writeme:
+        ssize_t retW = write(fd, (void *)block, sizeof(BlockPattern));
+        if (retW == -1)
+        {
+            std::cout << "new Write failed returned " << retW  << " " << errno << std::endl;
+            if (errno == 11)
+            {
+                goto writeme;
+            }
+            ret = -1;
+            break;
+        }
+        else if (retW != sizeof(BlockPattern))
+        {
+            std::cout << "Partial write " << retW << std::endl;
+            ret = -1;
+            break;
+        }
     }
 
     delete block;
@@ -171,7 +195,7 @@ int fillFile(uint64_t dir, uint64_t file)
     return ret;
 }
 
-int readFile(uint64_t dir, uint64_t file)
+int readFile(uint64_t dir, uint64_t file, uint64_t number)
 {
     int ret = 0;
 
@@ -184,7 +208,7 @@ int readFile(uint64_t dir, uint64_t file)
 
     sprintf(filename, "file%lu", file);
 
-    int fd = open(filename, O_RDONLY);
+    int fd = open(filename, O_RDONLY | O_DIRECT);
 
     if(fd < 0)
     {
@@ -198,14 +222,14 @@ int readFile(uint64_t dir, uint64_t file)
 
     for (uint64_t i = 0; i < MAXBLOCKS; i++)
     {
-        size_t readRet = read(fd, (void *)block, sizeof(BlockPattern));
-        if (readRet != sizeof(BlockPattern))
+        ssize_t readRet = read(fd, (void *)block, sizeof(BlockPattern));
+        if ((readRet == -1) || (readRet != sizeof(BlockPattern)))
         {
-            std::cout << "Read failed" << std::endl;
+            std::cout << "Read returned " << readRet << " " << errno << std::endl;
             ret = -1;
             break;
         }
-        if (block->readVerifyBlock(dir, file, i, offset))
+        if (block->readVerifyBlock(dir, file, i, offset, number))
         {
             status = -1;
             ret = -1;
@@ -233,7 +257,7 @@ int main(int argc, char* argv[])
 
     int write = 1;
 
-    if (argc != 3)
+    if ((argc < 3) || (argc > 4))
     {
         std::cout << "Arguments wrong or not provided. Usage: " << argv[0] << " 0 (write) OR 1(read)" <<  std::endl;
         return -1;
@@ -242,23 +266,29 @@ int main(int argc, char* argv[])
     int read = atoi(argv[1]);
     int file = atoi(argv[2]);
 
+    int number = 0;
+    if (argc == 4)
+    {
+        number = atoi(argv[3]);
+    }
+
     if (read)
     {
-        if (readFile(1, file))
+        if (readFile(1, file, number))
         {
             std::cout << "Read file failed file" << file << std::endl;
             return -1;
         }
-        std::cout << "Read and verify from file " << file << " done" << std::endl;
+        std::cout << "Read and verify from file " << file << " <" << number << "> done" << std::endl;
     }
     else
     {
-        if (fillFile(1, file))
+        if (fillFile(1, file, number))
         {
             std::cout << "Fill file failed file" << file << std::endl;
             return -1;
         }
-        std::cout << "Writing to file file" << file << " done" << std::endl;
+        std::cout << "Writing to file file" << file << " <" << number << "> done" << std::endl;
     }
 
     return 0;
